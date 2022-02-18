@@ -110,6 +110,7 @@ rel_inf <- function(res) {
   attr(x, "out.attrs") <- NULL
   x
 }
+
 plot_fun <- function(res) {
   u <- rel_inf(res)
   xx <- do.call(rbind, lapply(1:12, .plot_fun, res, u))
