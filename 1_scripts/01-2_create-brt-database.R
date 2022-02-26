@@ -35,7 +35,7 @@ with(xx2, table(lc=eskerLCC250, pt=eskerpoint))
 
 
 # Load the BAM V6 data
-load("0_data/raw/archive/BAMv6_ONBBS.RData")
+load("0_data/raw/BAMv6_ONBBS.RData")
 
 SPP <- intersect(intersect(tab$id, colnames(y1)), colnames(y2))
 
@@ -88,9 +88,61 @@ get_cn <- function(z, rmax=0.9) {
   }
   union(as.character(cr[,1]), as.character(cr[,2]))
 }
-cn2 <- get_cn(xx2[,colnames(xx2) != "NEAR_DIST"])
 
-## year matching for surveys ??? not sure what is multi-year, leave it for now
+# Initial variable list reduced to 110 through discussion with the RoF team, created as cn1
+cn1 <- c("eskerpoint",
+         "elev", "treecover", "LIDARheight", "road_yesno", "TPI", "TRI",
+         "slope", "agriculture_G750.O", "bedrock_G750.O", "bog_G750.O",
+         "communities_G750.O", "coniftreed_G750.O", "decidtreed_G750.O",
+         "disturbance_G750.O", "fen_G750.O", "heath_G750.O", "marsh_G750.O",
+         "mixedtreed_G750.O", "mudflat_G750.O", "openwater_G750.O", "shoreline_G750.O",
+         "sparsetreed_G750.O", "swamp_G750.O", "treedupland_G750.O", "turbidwater_G750.O",
+         "G750LandCover_NonVeg_v1.grd", "G750LandCover_Veg_v1.grd", "G750LandCover_VegNonTreed_v1.grd",
+         "G750LandCover_VegTreed_v1.grd", "G750Species_Abie_Bal_v1.grd",
+         "G750Species_Abie_Spp_v1.grd", "G750Species_Acer_Neg_v1.grd",
+         "G750Species_Acer_Pen_v1.grd", "G750Species_Acer_Rub_v1.grd",
+         "G750Species_Acer_Sac_v1.grd", "G750Species_Acer_Sah_v1.grd",
+         "G750Species_Acer_Spi_v1.grd", "G750Species_Acer_Spp_v1.grd",
+         "G750Species_Alnu_Rub_v1.grd", "G750Species_Alnu_Spp_v1.grd",
+         "G750Species_Betu_All_v1.grd", "G750Species_Betu_Pap_v1.grd",
+         "G750Species_Betu_Pop_v1.grd", "G750Species_Betu_Spp_v1.grd",
+         "G750Species_Carp_Car_v1.grd", "G750Species_Cary_Cor_v1.grd",
+         "G750Species_Fagu_Gra_v1.grd", "G750Species_Frax_Ame_v1.grd",
+         "G750Species_Frax_Nig_v1.grd", "G750Species_Frax_Pen_v1.grd",
+         "G750Species_Genc_Spp_v1.grd", "G750Species_Genh_Spp_v1.grd",
+         "G750Species_Jugl_Cin_v1.grd", "G750Species_Jugl_Nig_v1.grd",
+         "G750Species_Juni_Vir_v1.grd", "G750Species_Lari_Lar_v1.grd",
+         "G750Species_Lari_Spp_v1.grd", "G750Species_Malu_Spp_v1.grd",
+         "G750Species_Ostr_Vir_v1.grd", "G750Species_Pice_Abi_v1.grd",
+         "G750Species_Pice_Eng_v1.grd", "G750Species_Pice_Gla_v1.grd",
+         "G750Species_Pice_Mar_v1.grd", "G750Species_Pice_Rub_v1.grd",
+         "G750Species_Pice_Spp_v1.grd", "G750Species_Pinu_Alb_v1.grd",
+         "G750Species_Pinu_Ban_v1.grd", "G750Species_Pinu_Con_v1.grd",
+         "G750Species_Pinu_Mon_v1.grd", "G750Species_Pinu_Pon_v1.grd",
+         "G750Species_Pinu_Res_v1.grd", "G750Species_Pinu_Spp_v1.grd",
+         "G750Species_Pinu_Str_v1.grd", "G750Species_Pinu_Syl_v1.grd",
+         "G750Species_Popu_Bal_v1.grd", "G750Species_Popu_Gra_v1.grd",
+         "G750Species_Popu_Spp_v1.grd", "G750Species_Popu_Tre_v1.grd",
+         "G750Species_Popu_Tri_v1.grd", "G750Species_Prun_Pen_v1.grd",
+         "G750Species_Prun_Ser_v1.grd", "G750Species_Quer_Alb_v1.grd",
+         "G750Species_Quer_Mac_v1.grd", "G750Species_Quer_Rub_v1.grd",
+         "G750Species_Quer_Spp_v1.grd", "G750Species_Sali_Spp_v1.grd",
+         "G750Species_Sorb_Ame_v1.grd", "G750Species_Thuj_Occ_v1.grd",
+         "G750Species_Tili_Ame_v1.grd", "G750Species_Tsug_Can_v1.grd",
+         "G750Species_Tsug_Spp_v1.grd", "G750Species_Ulmu_Ame_v1.grd",
+         "G750SpeciesGroups_Broadleaf_Spp_v1.grd", "G750SpeciesGroups_Needleleaf_Spp_v1.grd",
+         "G750SpeciesGroups_Unknown_Spp_v1.grd", "G750Structure_Biomass_Branch_v1.grd",
+         "G750Structure_Biomass_Foliage_v1.grd", "G750Structure_Biomass_StemBark_v1.grd",
+         "G750Structure_Biomass_StemWood_v1.grd", "G750Structure_Biomass_TotalDead_v1.grd",
+         "G750Structure_Biomass_TotalLiveAboveGround_v1.grd", "G750Structure_Stand_Age_v1.grd",
+         "G750Structure_Stand_CrownClosure_v1.grd", "G750Structure_Stand_Height_v1.grd",
+         "G750Structure_Volume_Merch_v1.grd", "G750Structure_Volume_Total_v1.grd",
+         "biomass2015.ntems", "volume2015.ntems", "height2015.ntems")
+
+
+# Run the get_cn function to remove corellated and constant variables from the cn1 list
+cn2 <- sort(get_cn(xx2[,cn1]))
+
 
 # Filter spp with >= 20 detections
 SPP <- colnames(y)[colSums(y) >= 20]
