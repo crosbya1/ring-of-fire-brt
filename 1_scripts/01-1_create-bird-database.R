@@ -8,6 +8,7 @@ library(sqldf)
 library(rgdal)
 library(sf)
 library(ggplot2)
+library(tidyverse)
 
 
 load("0_data/raw/BAMv6_ONBBS.RData")
@@ -61,8 +62,12 @@ save(rof_bam_pts_ss, file = file.path("0_data/processed/rof_bam_pts_ss.Rdata"))
 
 
 
-
-
+png(filename = "3_outputs/maps/bcr_map.png",
+    width = 2000, height = 2000, units = "px", pointsize = 0.5,
+    bg = "white", res = 300)
+ggplot(data = bcr_on[which(bcr_on$BCR %in% c(7, 8, 12)), ]) + geom_sf(aes(fill = BCR)) + geom_sf(data = pts_ss) + 
+  geom_sf(data = ra, fill = NA, size = 1.5, colour = "red") + theme_bw() + theme(panel.grid = element_blank())
+dev.off()
 
 
 

@@ -6,6 +6,8 @@ library(jsonlite)
 library(sf)
 library(rgeos)
 library(raster)
+library(spdep)
+library(rgdal)
 
 
 # Get the list of species for teh ring of fire
@@ -52,7 +54,18 @@ plot(poly$geometry, add=TRUE, border="grey", col="#00000022")
 # Calculate distance from study area boundary
 di <- st_distance(poly, xy) # units m because of crs
 di <- di[1,] / 1000 # unit in km
-xx1$dist <- di
+xx1$dist <- as.numeric(di)
+
+# Calculate distance from Hudson Plains BCR
+ecozones <- st_transform(st_as_sf(readOGR(dsn = "0_data/raw/shapefiles", layer = "ecozones")), crs = st_crs(xy))
+hp <- ecozones[which(ecozones$ZONE_NAME == "Hudson Plain"), ]
+dh <- st_distance(hp, xy)
+dh <- dh[1, ]/1000
+xx1$dist_hp <- as.numeric(dh)
+
+nn <- dnearneigh(st_coordinates(xy), d1 = 0, d2 = 2500, row.names = xy$SS_V4)
+nn1 <- sapply(1:length(nn), function(x) length(nn[[x]]))
+xx1$num_neigh <- nn1
 
 rownames(xx1) <- xx1$PKEY_V4
 rownames(xx2) <- xx2$PKEY_V4
@@ -155,13 +168,21 @@ n0 <- sum(xx1$ecozone == "hudson_plain")
 i1 <- which(xx1$ecozone == "hudson_plain")
 i2 <- which(xx1$ecozone != "hudson_plain")
 
+# Weight the selection probability of i2 data by distance from the Hudson Plains and local point density 
+i2.pts <- xx1[i2, ]
+i2.dist <-  1 - (i2.pts$dist_hp - min(i2.pts$dist_hp))/(max(i2.pts$dist_hp) - min(i2.pts$dist_hp))
+i2.dens <- 1 - (i2.pts$num_neigh - min(i2.pts$num_neigh))/(max(i2.pts$num_neigh) - min(i2.pts$num_neigh))
+
+ww <- i2.dist*i2.dens
+
+
 resample_fun <- function(i) {
   if (i == 1) {
     j1 <- i1
-    j2 <- sample(i2, n0, replace=FALSE)
+    j2 <- sample(i2, n0, replace=FALSE, prob = ww)
   } else {
-    j1 <- sample(i1, n0, replace=TRUE)
-    j2 <- sample(i2, n0, replace=TRUE)
+    j1 <- sample(i1, n0, replace=FALSE)
+    j2 <- sample(i2, n0, replace=FALSE, prob = ww)
     
   }
   c(j1, j2)
@@ -172,4 +193,22 @@ B <- 250
 set.seed(1)
 BB <- sapply(1:B, resample_fun)
 
-save(y, off, xx1, xx2, cn2, SPP, BB, file="0_data/processed/BAMv6_RoFpackage_2022-01.RData")
+save(y, off, xx1, xx2, cn2, SPP, BB, file="0_data/processed/BAMv6_RoFpackage_2022-04.RData")
+
+
+
+# Create table of detections x ecozone 
+spp_det_table <- do.call(rbind, lapply(1:length(SPP), function(x){
+  spp <- SPP[x] 
+  det <- ifelse(as.numeric(y[, spp]) > 0, 1, 0)
+  b <- sum(det[which(xx1$ecozone!="hudson_plain")])
+  h <- sum(det[which(xx1$ecozone=="hudson_plain")])
+  data.frame(spp = spp, boreal = b, hudson_plain = h, total = sum(det))
+}))
+
+saveRDS(spp_det_table, file = "3_outputs/tables/spp_det_table.Rds")
+
+
+
+
+
