@@ -12,41 +12,11 @@ library(raster)
 fl <- list.files("0_data/processed/prediction-rasters")
 names(fl) <- gsub("\\.tif", "", fl)
 
-#load("d:/bam/2021/rof/BAMv6_RoFpackage.RData")
+load("0_data/processed/BAMv6_RoFpackage_2022-01.Rdata")
 
-cn2 <- c("eskerpoint",
-         "agriculture_G750.O", "bedrock_G750.O", "biomass2015.ntems",
-         "bog_G750.O", "communities_G750.O", "coniftreed_G750.O", "decidtreed_G750.O",
-         "disturbance_G750.O", "elev", "fen_G750.O", "G750LandCover_Veg_v1.grd",
-         "G750LandCover_VegNonTreed_v1.grd", "G750LandCover_VegTreed_v1.grd",
-         "G750Species_Abie_Bal_v1.grd", "G750Species_Acer_Neg_v1.grd",
-         "G750Species_Acer_Pen_v1.grd", "G750Species_Acer_Rub_v1.grd",
-         "G750Species_Acer_Sac_v1.grd", "G750Species_Acer_Sah_v1.grd",
-         "G750Species_Acer_Spi_v1.grd", "G750Species_Acer_Spp_v1.grd",
-         "G750Species_Alnu_Spp_v1.grd", "G750Species_Betu_All_v1.grd",
-         "G750Species_Betu_Pap_v1.grd", "G750Species_Betu_Pop_v1.grd",
-         "G750Species_Fagu_Gra_v1.grd", "G750Species_Frax_Ame_v1.grd",
-         "G750Species_Frax_Nig_v1.grd", "G750Species_Frax_Pen_v1.grd",
-         "G750Species_Genc_Spp_v1.grd", "G750Species_Genh_Spp_v1.grd",
-         "G750Species_Lari_Lar_v1.grd", "G750Species_Pice_Abi_v1.grd",
-         "G750Species_Pice_Gla_v1.grd", "G750Species_Pice_Mar_v1.grd",
-         "G750Species_Pice_Rub_v1.grd", "G750Species_Pinu_Ban_v1.grd",
-         "G750Species_Pinu_Con_v1.grd", "G750Species_Pinu_Res_v1.grd",
-         "G750Species_Pinu_Str_v1.grd", "G750Species_Popu_Bal_v1.grd",
-         "G750Species_Popu_Gra_v1.grd", "G750Species_Popu_Spp_v1.grd",
-         "G750Species_Popu_Tre_v1.grd", "G750Species_Prun_Pen_v1.grd",
-         "G750Species_Quer_Mac_v1.grd", "G750Species_Quer_Rub_v1.grd",
-         "G750Species_Sali_Spp_v1.grd", "G750Species_Sorb_Ame_v1.grd",
-         "G750Species_Thuj_Occ_v1.grd", "G750Species_Tili_Ame_v1.grd",
-         "G750Species_Tsug_Can_v1.grd", "G750Species_Ulmu_Ame_v1.grd",
-         "G750SpeciesGroups_Broadleaf_Spp_v1.grd", "G750SpeciesGroups_Needleleaf_Spp_v1.grd",
-         "G750SpeciesGroups_Unknown_Spp_v1.grd", "G750Structure_Biomass_TotalDead_v1.grd",
-         "G750Structure_Stand_Age_v1.grd", "G750Structure_Volume_Total_v1.grd",
-         "heath_G750.O", "height2015.ntems", "LIDARheight", "marsh_G750.O",
-         "mixedtreed_G750.O", "mudflat_G750.O", "openwater_G750.O", "road_yesno",
-         "slope", "sparsetreed_G750.O", "swamp_G750.O", "TPI", "treecover",
-         "turbidwater_G750.O", "volume2015.ntems")
 compare_sets(names(fl), cn2)
+
+
 
 r <- raster(paste0(
   "0_data/processed/prediction-rasters/",
@@ -153,7 +123,7 @@ for (j in CHUNKS) {
 ## Putting together the pieces into raster maps. This loops creates raster maps that are the mean predicted values across 
 ## the bootstrapped replicates for each spp
 library(raster)
-SPP <- list.dirs("2_pipeline/store/brt-boot-pred", full.names=FALSE)[-1]
+SPP <- list.dirs("2_pipeline/store/brt-boot-pred", recursive = FALSE, full.names=FALSE)
 load("0_data/processed/predictor-layers/chunks2/chunks.RData")
 r <- raster(paste0(
   "0_data/processed/prediction-rasters/",
@@ -192,6 +162,7 @@ pl <- rgdal::readOGR(dsn = "0_data/processed", layer = "boundary")
 pl <- spTransform(pl, proj4string(r))
 #u <- mask(r, pl)
 
+# Mean density maps 
 for (spp in SPP) {
   cat(spp, "\n")
   flush.console()
@@ -204,11 +175,31 @@ for (spp in SPP) {
   
   dir <- "3_outputs/maps/brt-boot-pred-mosaic"
   if(!dir.exists(dir)){dir.create(dir)}
-  png(paste0(dir, "/", spp, ".png"), width=500, height=500)
+  png(paste0(dir, "/", spp, "_density.png"), width=500, height=500)
+  op <- par(mfrow=c(1,1), mar=c(1,3,2,6))
+  plot(ri, axes=FALSE, box=FALSE, col=hcl.colors(100, "Lajolla"),
+       main=paste(spp, "Mean Density (males/ha)\nPopulation size in study area (blue polygon) =", N, "M inds."))
+  #        main=paste(spp, "Mean Density (males/ha)"))
+  plot(pl, add=TRUE, border=4)
+  par(op)
+  dev.off()
+  
+}
+
+# Uncertainty maps
+for (spp in SPP) {
+  cat(spp, "\n")
+  flush.console()
+  
+  ri <- raster(paste0("2_pipeline/store/brt-boot-pred-mosaic/", spp, "_uncertainty.tif"))
+  u <- mask(ri, pl)
+  
+  dir <- "3_outputs/maps/brt-boot-pred-mosaic"
+  if(!dir.exists(dir)){dir.create(dir)}
+  png(paste0(dir, "/", spp, "_uncertainty.png"), width=500, height=500)
   op <- par(mfrow=c(1,1), mar=c(1,1,2,6))
   plot(ri, axes=FALSE, box=FALSE, col=hcl.colors(100, "Lajolla"),
-       #        main=paste(spp, "Mean Density (males/ha)\nPopulation size =", N, "M inds."))
-       main=paste(spp, "Mean Density (males/ha)"))
+       main=paste(spp, "Uncertainty in mean densty estimate"))
   plot(pl, add=TRUE, border=4)
   par(op)
   dev.off()

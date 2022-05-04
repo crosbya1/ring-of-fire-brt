@@ -1,5 +1,3 @@
-# R code for fitting bootstrapped BRT SDM models for birds in Far North Ontario
-
 
 
 library(mefa4)
@@ -7,19 +5,9 @@ library(gbm)
 library(dismo)
 library(ggplot2)
 library(segmented)
+library(parallel)
 
-load("0_data/processed/BAMv6_RoFpackage_2022-01.Rdata")
-
-
-rel_inf <- function(res) {
-  rel.inf <- relative.influence(res, res$n.trees)
-  rel.inf[rel.inf < 0] <- 0
-  i <- order(-rel.inf)
-  rel.inf <- 100 * rel.inf/sum(rel.inf)
-  out <- data.frame(var = res$var.names[i], rel.inf = rel.inf[i])
-  attr(out, "n.trees") <- res$n.trees
-  out
-}
+load("../../0_data/processed/BAMv6_RoFpackage_2022-04.RData")
 
 
 # Function to run bootstrapped BRT models
@@ -54,30 +42,49 @@ run_brt1 <- function(i, spp) {
 }
 
 
-# Test on 2 spp with 2 bootstrapped runs, using the 
-dir <- "2_pipeline/store/brt-boot-1"
+rel_inf <- function(res) {
+  rel.inf <- relative.influence(res, res$n.trees)
+  rel.inf[rel.inf < 0] <- 0
+  i <- order(-rel.inf)
+  rel.inf <- 100 * rel.inf/sum(rel.inf)
+  out <- data.frame(var = res$var.names[i], rel.inf = rel.inf[i])
+  attr(out, "n.trees") <- res$n.trees
+  out
+}
+
+
+dir <- "../../2_pipeline/store/brt-boot-1"
 if(!dir.exists(dir)){dir.create(dir)}
+
+cl <- makeCluster(5, timeout = 548000)
+clusterExport(cl, list("run_brt1", "BB", "SPP", "y", "off", "xx1", "xx2"))
+
+nfold <- 32
 system.time({
-  for (spp in SPP[1:2]) {
+for(i in 1:length(SPP)){
+    spp <- SPP[i]
     cat("\n\n------------------------------", spp, "------------------------------\n\n")
-    load(paste0("2_pipeline/store/brt2-xv/", spp, ".Rdata"))
-    d1 <- paste0("2_pipeline/store/brt-boot-1/", spp)
-    if(!dir.exists(d1)){dir.create(d1)}
-    for(i in 1:2){
-      res1 <- run_brt1(i, spp)
-      save(res1, file=paste0("2_pipeline/store/brt-boot-1/", spp, "/", i, ".RData"))
+    load(paste0("../../2_pipeline/store/brt2-xv/", spp, ".RData"))
+    if(inherits(res, "gbm")){    
+      d1 <- paste0("../../2_pipeline/store/brt-boot-1/", spp)
+      if(!dir.exists(d1)){dir.create(d1)}
+      cl <- makeCluster(nfold, timeout = 548000)
+      clusterExport(cl, list("run_brt1", "rel_inf", "BB", "spp", "y", "off", "xx1", "xx2", "res", "cn2"))
+      parLapply(cl, 1:nfold, function(x){
+        library(mefa4)
+        library(gbm)
+        library(dismo)
+        library(ggplot2)
+        library(segmented)
+
+        r2 <- run_brt1(x, spp)
+        save(r2, file=paste0("../../2_pipeline/store/brt-boot-1/", spp, "/", x, ".RData"))
+      })
+    stopCluster(cl)
+    rm(cl)
     }
   }
 })
-
-
-
-
-
-
-
-
-
 
 
 

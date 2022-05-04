@@ -3,9 +3,9 @@
 library(mefa4)
 library(gbm)
 library(dismo)
-library(tidyverse)
+library(parallel)
 
-load("0_data/processed/BAMv6_RoFpackage_2022-04.RData")
+load("../../0_data/processed/BAMv6_RoFpackage_2022-04.RData")
 
 
 ## run BRT with xv
@@ -34,16 +34,33 @@ run_brt_xv <- function(spp, RATE=0.001) {
 }
 
 
-if(!dir.exists("2_pipeline/store/brt2-xv"))
-  (dir.create("2_pipeline/store/brt2-xv"))
-system.time({
-  for (spp in SPP) {
-    cat("\n\n------------------------------", spp, "------------------------------\n\n")
-    res <- run_brt_xv(spp)
-    save(res, file=paste0("2_pipeline/store/brt2-xv/", spp, ".RData"))
-  }
-})
+if(!dir.exists("../../2_pipeline/store/brt2-xv"))
+  (dir.create("../../2_pipeline/store/brt2-xv"))
+  
+cl <- makeCluster(ceiling(length(SPP)/6), timeout = 548000)
 
+clusterExport(cl, list("run_brt_xv", "BB", "SPP", "y", "off", "xx1", "xx2", "cn2"))
+
+loop <- 1
+for(i in 1:6){
+  n <- ceiling(length(SPP)/6)
+  nl <- loop:(loop + n - 1)
+  nl <- nl[which(nl <= length(SPP))]
+  nl <- nl[which(!is.na(nl))]
+  
+  parLapply(cl, nl, function(x){
+    library(gbm)
+	library(dismo)
+	library(mefa4)
+	spp <- SPP[x]
+    res <- run_brt_xv(spp)
+    save(res, file = paste0("../../2_pipeline/store/brt2-xv/", spp, ".RData"))
+	}
+  )
+  loop <- loop + n - 1
+}
+
+  
 
 ## check variable importance
 
@@ -90,13 +107,12 @@ plot_fun <- function(res) {
 }
 
 
-if(!dir.exists("2_pipeline/store/brt2-xv-pred-mosaic")){dir.create("2_pipeline/store/brt2-xv-pred-mosaic")}
-
+if(!dir.exists("../../2_pipeline/store/brt2-xv-pred-mosaic")){dir.create("2_pipeline/store/brt2-xv-pred-mosaic")}
 
 mod.fit <- NULL
 for (spp in SPP) {
   cat(spp, "\n")
-  load(paste0("2_pipeline/store/brt2-xv/", spp, ".RData"))
+  load(paste0("../../2_pipeline/store/brt2-xv/", spp, ".RData"))
   if (inherits(res, "gbm")) {
     cvstats <- as.data.frame(res$cv.statistics[c(1,3)])
     cvstats$deviance.null <- res$self.statistics$mean.null
@@ -105,24 +121,23 @@ for (spp in SPP) {
     mod.fit <- rbind(mod.fit, data.frame(spp = spp, cvstats))
   }
 }
-mod.fit$deviance.exp[which(mod.fit$deviance.exp < 0)] <- 0
-saveRDS(mod.fit, "2_pipeline/store/model_fit.rds")
+saveRDS(mod.fit, "../../2_pipeline/store/model_fit.rds")
 
 
 # See best variables
 RIall <-NULL
 for (spp in SPP) {
   cat(spp, "\n")
-  load(paste0("2_pipeline/store/brt2-xv/", spp, ".RData"))
+  load(paste0("../../2_pipeline/store/brt2-xv/", spp, ".RData"))
   if (inherits(res, "gbm")) {
     u <- rel_inf(res)
     u$spp <- spp
     RIall <- rbind(RIall, u)
     p <- plot_fun(res)
-    ggsave(sprintf("2_pipeline/store/brt2-xv-pred-mosaic/%s-effects12.png", spp), p)
+    ggsave(sprintf("../../2_pipeline/store/brt2-xv-pred-mosaic/%s-effects12.png", spp), p)
   }
 }
-write.csv(RIall, row.names=FALSE, file="3_outputs/tables/SppBRTVarImp_v2.csv")
+write.csv(RIall, row.names=FALSE, file="../../3_outputs/tables/SppBRTVarImp_v2.csv")
 
 RIall$n0 <- ifelse(RIall$rel.inf > 0, 1, 0)
 z <- xtabs(~var+n0,RIall)
@@ -148,7 +163,7 @@ cn2x_var <- c("Ecozone", "Agriculture", "Bedrock", "Biomass (2015)", "Bog", "Com
              "Populus balsamifera", "Populus grandifolia", "Populus spp", "Populus tremuloides", "Prunus pensylvanica", 
              "Quercus macrocarpa", "Quercus rubra", "Salix spp", "Sorbus americana", "Thuja occidentalis", 
              "Tilia americana", "Tsuga canadensis", "Ulmus americana", "Broadleaf spp", "Needleleaf spp", "Unknown spp", 
-             "Total dead biomass", "Stand age", "Total biomass", "Heath", "Height", "Lidar height", "Marsh", "Mixed treed", 
+             "Total biomass", "Stand age", "Total volume", "Heath", "Height", "Lidar height", "Marsh", "Mixed treed", 
              "Mudflat", "Open water", "Road", "Slope", "Sparsely treed", "Swamp", "Topopgraphic position index", 
              "Tree cover", "Turbid water", "Volume (2015)")
 
@@ -159,22 +174,5 @@ var_table <- data.frame(variable = cn2x, variable_name = cn2x_var, scale = cn2x_
 
 varImp_table <- data.frame(var_table[match(varImp$var, var_table$variable), ], med_influence = varImp$med)
 
-saveRDS(varImp_table, "2_pipeline/store/varImp_table.rds")
-
-saveRDS(var_table, file = "2_pipeline/store/var_table.rds")
-
-
-
-# Retrieve the deviance and correlation statistics
-cv.stats <- NULL
-for (spp in SPP) {
-  cat(spp, "\n")
-  load(paste0("2_pipeline/store/brt2-xv/", spp, ".RData"))
-  if (inherits(res, "gbm")) {
-    p <- data.frame(spp = spp, deviance = res$cv.statistics$deviance.mean, cor = res$cv.statistics$correlation.mean)
-    cv.stats <- rbind(cv.stats, p)
-  }
-}
-write.csv(cv.stats, row.names=FALSE, file="3_outputs/tables/cv_stats.csv")
-saveRDS(cv.stats, "2_pipeline/store/cv_stats.rds")
+saveRDS(varImp_table, "../../2_pipeline/store/varImp_table.rds")
 
